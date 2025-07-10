@@ -6,7 +6,6 @@ from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-import pmdarima as pm
 import warnings
 import streamlit as st
 
@@ -44,17 +43,15 @@ corr_matrix = df[features + targets].corr()
 for zone in targets:
     corr_with_zone = corr_matrix[zone][features]
     corr_sorted = corr_with_zone.abs().sort_values(ascending=False)
-    
     print(f'\nTop correlations for {zone}:')
     print(corr_sorted)
 
-# Cell 4: clean non-numeric and drop NaNs
+# Cell 6: clean non-numeric and drop NaNs
 for col in features + targets:
     df[col] = pd.to_numeric(df[col], errors='coerce')
 df = df.dropna(subset=features + targets)
 
-
-# Cell 5: find best (p,d,q) by AIC for each zone
+# Cell 7: find best (p,d,q) by AIC for each zone
 orders = {}
 for zone in targets:
     best_aic = np.inf
@@ -79,7 +76,7 @@ for zone in targets:
     orders[zone] = best_order
     print(f"{zone} best order: {best_order} (AIC={best_aic:.0f})")
 
-# Cell 6: fit SARIMAX for each zone
+# Cell 8: fit SARIMAX for each zone
 models = {}
 results = {}
 
@@ -90,13 +87,12 @@ for zone, order in orders.items():
     results[zone] = r
     print(f"{zone} fitted with order {order}")
 
-# Cell 7: (optional) inspect coefficient p-values
+# Cell 9: (optional) inspect coefficient p-values
 for zone, res in results.items():
     print(f"\n=== {zone} exog p-values ===")
     print(res.summary().tables[1])
 
-
-# Cell 8: forecast next 24 hours with exogenous inputs
+# Cell 10: forecast next 24 hours with exogenous inputs
 n_steps = 24
 
 # 1. Build a future datetime index
@@ -111,11 +107,10 @@ future_index = pd.date_range(
 future_exog = pd.DataFrame(index=future_index)
 # cyclical features
 future_exog['TimeOfDay'] = future_index.hour
-# you may need to map month->season exactly as in your training data
-future_exog['Season']    = ((future_index.month % 4) + 1)  # example mapping
-# for the numeric exogs, here we simply repeat the last observed block
-for col in ['Temperature','Humidity','WindSpeed',
-            'GeneralDiffuseFlows','DiffuseFlows']:
+# example mapping for season
+future_exog['Season']    = ((future_index.month % 4) + 1)
+# repeat last observed values
+for col in ['Temperature','Humidity','WindSpeed','GeneralDiffuseFlows','DiffuseFlows']:
     future_exog[col] = df[col].iloc[-n_steps:].values
 
 # 3. Forecast each zone using its fitted result
@@ -124,7 +119,6 @@ for zone, res in results.items():
     mean = f.predicted_mean
     ci   = f.conf_int()
 
-    # plot
     plt.figure(figsize=(10,3))
     plt.plot(df[zone].iloc[-168:], label='history')
     plt.plot(future_index, mean, label='forecast')
@@ -140,7 +134,7 @@ for zone, res in results.items():
     plt.legend()
     plt.show()
 
-# Cell 9: Residual diagnostics
+# Cell 11: Residual diagnostics
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
@@ -155,7 +149,7 @@ for zone, res in results.items():
     lb = acorr_ljungbox(resid, lags=[24], return_df=True)
     print(f'{zone} Ljung–Box p-value:', lb["lb_pvalue"].values[0])
 
-# Cell 10: Hold-out validation and accuracy
+# Cell 12: Hold-out validation and accuracy
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import numpy as np
 
@@ -178,24 +172,20 @@ for zone, res in trained.items():
     mape = np.mean(np.abs((test[zone] - pred) / test[zone])) * 100
     print(f"{zone}  RMSE:{rmse:.2f}, MAE:{mae:.2f}, MAPE:{mape:.2f}%")
 
-
-# Cell 11: Baseline comparisons
-# 1) Last-value persistence
+# Cell 13: Baseline comparisons
 for zone in targets:
     last = train[zone].iloc[-1]
     base = pd.Series(last, index=test.index)
     rmse = np.sqrt(mean_squared_error(test[zone], base))
     print(f"{zone} persistence RMSE: {rmse:.2f}")
 
-# 2) Seasonal naive (same hour 24h ago)
 for zone in targets:
     pred_sn = test.index.map(lambda t: df[zone].loc[t - pd.Timedelta(hours=24)])
     pred_sn = pd.Series(pred_sn, index=test.index)
     rmse = np.sqrt(mean_squared_error(test[zone], pred_sn))
     print(f"{zone} seasonal-naive RMSE: {rmse:.2f}")
 
-
-# Cell 12: Drop exogs with p>0.05 and refit
+# Cell 14: Drop exogs with p>0.05 and refit
 for zone, res in results.items():
     pvals = res.pvalues[features]
     drop  = pvals[pvals > .05].index.tolist()
@@ -205,8 +195,7 @@ for zone, res in results.items():
     r2 = m2.fit(disp=False)
     print(f"{zone} new AIC: {r2.aic:.0f}")
 
-
-# Cell 13: Add a seasonal term (daily) and compare AIC
+# Cell 15: Add a seasonal term (daily) and compare AIC
 for zone in targets:
     p,d,q = orders[zone]
     m_seas = SARIMAX(
