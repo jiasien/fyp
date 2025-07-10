@@ -3,5 +3,4 @@ pandas
 numpy
 matplotlib
 statsmodels
-pmdarima
 scikit-learn
